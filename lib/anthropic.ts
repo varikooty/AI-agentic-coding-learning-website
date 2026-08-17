@@ -1,39 +1,56 @@
-import Anthropic from "@anthropic-ai/sdk";
+/**
+ * Talks to a local Ollama server instead of the Anthropic API — no key, no
+ * billing, runs entirely on your machine. `runPrompt`'s signature is kept
+ * identical to the previous Anthropic-backed version so grading.ts and the
+ * API routes don't need to change.
+ *
+ * Requires Ollama running locally (https://ollama.com) with the model pulled:
+ *   ollama pull llama3.1:8b
+ */
 
-let client: Anthropic | null = null;
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+export const MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
 
-/** Lazily constructed so builds/typechecks don't require ANTHROPIC_API_KEY to be set. */
-export function getAnthropicClient(): Anthropic {
-  if (!client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "ANTHROPIC_API_KEY is not set. Add it to your environment (see .env.example)."
-      );
-    }
-    client = new Anthropic({ apiKey });
-  }
-  return client;
+interface OllamaChatResponse {
+  message?: { role: string; content: string };
 }
-
-export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
 
 export async function runPrompt(opts: {
   system?: string;
   userMessage: string;
   maxTokens?: number;
 }): Promise<string> {
-  const anthropic = getAnthropicClient();
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: opts.maxTokens ?? 1024,
-    system: opts.system,
-    messages: [{ role: "user", content: opts.userMessage }],
-  });
+  const messages: { role: string; content: string }[] = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  messages.push({ role: "user", content: opts.userMessage });
 
-  return response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
+  let res: Response;
+  try {
+    res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        messages,
+        stream: false,
+        options: { num_predict: opts.maxTokens ?? 1024 },
+      }),
+    });
+  } catch {
+    throw new Error(
+      `Couldn't reach Ollama at ${OLLAMA_BASE_URL}. Is it running? Start it and make sure "${MODEL}" is pulled (ollama pull ${MODEL}).`
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Ollama request failed (${res.status}): ${text || res.statusText}`);
+  }
+
+  const data = (await res.json()) as OllamaChatResponse;
+  const content = data.message?.content;
+  if (typeof content !== "string") {
+    throw new Error("Ollama response didn't include message content.");
+  }
+  return content.trim();
 }

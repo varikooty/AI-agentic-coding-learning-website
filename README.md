@@ -29,39 +29,60 @@ outer ring / off the paper) instead of a plain progress bar.
 
 ## Why there's a backend at all
 
-The grading and coach calls hit the Anthropic API with a real API key. That
-key is only ever read server-side (`lib/anthropic.ts`, used exclusively from
-`app/api/*/route.ts`) — it's never sent to the browser. A version of this
-that called the Anthropic API directly from client-side JavaScript would leak
-the key to anyone who opened dev tools, so the Next.js API routes exist
-specifically to keep the key server-side while still serving a fully static
-frontend everywhere else.
+The grading and coach calls hit an LLM. `lib/anthropic.ts` (name kept for a
+small diff — it no longer touches Anthropic) is the one place that talks to
+the model, called exclusively from `app/api/*/route.ts`. Even though the
+current backend (Ollama, see below) doesn't need a secret key, keeping the
+model call server-side still matters: it's what let this run against a paid
+Anthropic API earlier without ever shipping a key to the browser, and it's
+what would let this swap back to a hosted API later without touching
+`grading.ts` or any component.
 
-## Local development
+### Running against a local model (current default)
 
-```bash
-npm install
-cp .env.example .env.local   # then fill in ANTHROPIC_API_KEY
-npm run dev
-```
+This currently calls a local [Ollama](https://ollama.com) server instead of
+a hosted API — free, unlimited, fully offline, at the cost of noticeably
+rougher grading than Claude on the fuzzier challenges (especially the
+ambiguous test case in Format Lock-In and the judge calls in Injection
+Resistance).
 
-Open http://localhost:3000.
+1. Install Ollama: https://ollama.com/download. It runs a local API at
+   `http://localhost:11434`.
+2. Pull a model: `ollama pull llama3.1:8b` (~4-5GB, one-time).
+3. Sanity-check it works standalone: `ollama run llama3.1:8b`.
+4. `npm install && cp .env.example .env.local` (defaults already point at
+   `localhost:11434` / `llama3.1:8b` — edit `.env.local` if you used a
+   different model).
+5. `npm run dev`, open http://localhost:3000, and fire a target. Ollama must
+   already be running.
+
+### Switching back to a hosted API
+
+Swap the body of `runPrompt()` in `lib/anthropic.ts` back to calling
+Anthropic (or any other provider) — it's the only function `grading.ts` and
+the API routes depend on, so nothing else needs to change. Keep whatever
+API key server-side only, exactly as `lib/anthropic.ts` does now.
 
 ## Deploying
 
-This is a standard Next.js app (frontend + serverless API routes in one
-deploy), so the simplest path is:
+**A plain `vercel deploy` won't work with the current Ollama backend** —
+Vercel's serverless functions would try to reach `localhost:11434` on
+*their* machine, not yours, and there's nothing running there. Two ways to
+actually ship this:
 
-1. **Vercel** — import this repo at https://vercel.com/new. Vercel detects
-   Next.js automatically; no build config needed.
-2. Set the environment variable `ANTHROPIC_API_KEY` (and optionally
-   `ANTHROPIC_MODEL`) in the Vercel project's Settings → Environment
-   Variables. Get a key at https://console.anthropic.com/.
-3. Deploy. The API routes (`/api/grade`, `/api/coach`) run as serverless
-   functions automatically — nothing else to configure.
+- **Swap back to a hosted API** (see above) before deploying — then a normal
+  Vercel/Netlify/Cloudflare Pages deploy works exactly as it did originally:
+  import the repo, set the provider's API key as an environment variable,
+  deploy. The API routes run as serverless functions automatically.
+- **Keep Ollama, but make it reachable from the deployed app** — e.g. run
+  Ollama on a server/VPS Vercel can reach and point `OLLAMA_BASE_URL` at it,
+  or self-host the whole Next.js app (Docker, a VPS, etc.) on the same
+  machine as Ollama. There's no way to reach a laptop's `localhost` from a
+  serverless deploy.
 
-Netlify or Cloudflare Pages work the same way (both support Next.js API
-routes/functions natively) if you'd rather not use Vercel.
+For local-only use (running on your own machine), none of this matters —
+`npm run dev` or `npm run build && npm start` talk straight to your own
+Ollama instance.
 
 ## Not built yet (natural next steps)
 
@@ -92,7 +113,7 @@ lib/
   challenges.ts            challenge definitions incl. hidden tests — SERVER ONLY
   types.ts                 shared types, incl. the sanitized PublicChallenge shape
   grading.ts                deterministic + judge grading
-  anthropic.ts              thin Anthropic SDK wrapper
+  anthropic.ts              the LLM call — currently Ollama, see above
   progress.ts                localStorage progress helpers (client only)
 components/                 UI: prompt editor, score dial, results, coach panel, etc.
 ```
