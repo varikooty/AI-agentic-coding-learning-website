@@ -119,7 +119,9 @@ export default function TargetClient({ challenge }: { challenge: PublicChallenge
                         className={`mr-2 rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
                           t.kind === "attack"
                             ? "border-range-red/30 text-range-red"
-                            : "border-range-green/30 text-range-green"
+                            : t.kind === "ambiguous"
+                              ? "border-range-amber/30 text-range-amber"
+                              : "border-range-green/30 text-range-green"
                         }`}
                       >
                         {t.kind}

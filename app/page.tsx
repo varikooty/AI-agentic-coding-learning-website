@@ -1,7 +1,13 @@
 import { challenges } from "@/lib/challenges";
+import { agentChallenges } from "@/lib/agent-challenges";
 import ChallengeCard from "@/components/ChallengeCard";
 import TierBadge from "@/components/TierBadge";
 import type { Tier } from "@/lib/types";
+
+const allChallenges = [
+  ...challenges.map((c) => ({ id: c.id, title: c.title, tagline: c.tagline, tier: c.tier, gradingType: c.gradingType as string })),
+  ...agentChallenges.map((c) => ({ id: c.id, title: c.title, tagline: c.tagline, tier: c.tier, gradingType: "agentic" })),
+];
 
 const TIER_ORDER: Tier[] = ["beginner", "intermediate", "advanced", "expert"];
 const TIER_INTRO: Record<Tier, string> = {
@@ -14,7 +20,7 @@ const TIER_INTRO: Record<Tier, string> = {
 export default function HomePage() {
   const byTier = TIER_ORDER.map((tier) => ({
     tier,
-    items: challenges.filter((c) => c.tier === tier),
+    items: allChallenges.filter((c) => c.tier === tier),
   }));
 
   return (

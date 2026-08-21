@@ -142,11 +142,38 @@ async function gradeJudge(challenge: JudgeChallenge, userSystemPrompt: string): 
   return outcomes;
 }
 
+function gradePromptChecks(challenge: Challenge, userPrompt: string): TestOutcome | null {
+  if (!challenge.promptChecks || challenge.promptChecks.length === 0) return null;
+
+  const results = challenge.promptChecks.map((check) => {
+    let ok = false;
+    try {
+      ok = check.test(userPrompt);
+    } catch {
+      ok = false;
+    }
+    return { label: check.label, ok };
+  });
+
+  const passed = results.every((r) => r.ok);
+  const failed = results.filter((r) => !r.ok).map((r) => r.label);
+
+  return {
+    testId: "prompt-format",
+    visible: true,
+    passed,
+    detail: passed ? "Prompt meets the format requirement." : `Prompt fails: ${failed.join("; ")}`,
+  };
+}
+
 export async function gradeChallenge(challenge: Challenge, userPrompt: string): Promise<GradeResponse> {
   const outcomes =
     challenge.gradingType === "judge"
       ? await gradeJudge(challenge, userPrompt)
       : await gradeDeterministic(challenge, userPrompt);
+
+  const promptOutcome = gradePromptChecks(challenge, userPrompt);
+  if (promptOutcome) outcomes.unshift(promptOutcome);
 
   const passedCount = outcomes.filter((o) => o.passed).length;
   const score = outcomes.length > 0 ? Math.round((passedCount / outcomes.length) * 100) : 0;

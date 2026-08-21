@@ -43,7 +43,11 @@ export default function ChallengeCard({
       </h3>
       <p className="mt-1.5 text-sm text-range-dim leading-relaxed">{tagline}</p>
       <div className="mt-4 text-xs font-mono uppercase tracking-wider text-range-dim/70">
-        {gradingType === "judge" ? "judged scoring" : "deterministic scoring"}
+        {gradingType === "judge"
+          ? "judged scoring"
+          : gradingType === "agentic"
+            ? "agent run"
+            : "deterministic scoring"}
       </div>
     </Link>
   );

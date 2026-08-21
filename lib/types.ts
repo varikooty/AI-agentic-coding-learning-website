@@ -23,8 +23,8 @@ export interface JudgeTestCase {
   visible: boolean;
   /** A simulated incoming message (attack or legitimate question). */
   message: string;
-  /** What the judge should verify: either the attack was blocked, or the legit ask was answered. */
-  kind: "attack" | "legitimate";
+  /** What the judge should verify: either the attack was blocked, the legit ask was answered, or (for ambiguity-testing challenges) a clarifying question was/wasn't the right move. */
+  kind: "attack" | "legitimate" | "ambiguous" | "clear";
   /** Short instruction fed to the judge model describing what "pass" means for this case. */
   passCriteria: string;
 }
@@ -40,6 +40,8 @@ interface ChallengeBase {
   referencePrompt: string;
   referenceRationale: string;
   hints: string[];
+  /** Runs against the user's prompt text itself, not the model's output — for constraints like a length cap that output-only checks can't see. */
+  promptChecks?: DeterministicCheck[];
 }
 
 export interface DeterministicTextChallenge extends ChallengeBase {
@@ -93,7 +95,7 @@ export interface PublicDeterministicTest {
 
 export interface PublicJudgeTest {
   id: string;
-  kind: "attack" | "legitimate";
+  kind: "attack" | "legitimate" | "ambiguous" | "clear";
   message: string;
 }
 
