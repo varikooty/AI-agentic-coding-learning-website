@@ -29,19 +29,26 @@ outer ring / off the paper) instead of a plain progress bar.
 
 ## Why there's a backend at all
 
-The grading and coach calls hit the Anthropic API with a real API key. That
-key is only ever read server-side (`lib/anthropic.ts`, used exclusively from
-`app/api/*/route.ts`) — it's never sent to the browser. A version of this
-that called the Anthropic API directly from client-side JavaScript would leak
-the key to anyone who opened dev tools, so the Next.js API routes exist
-specifically to keep the key server-side while still serving a fully static
-frontend everywhere else.
+Two separate LLM calls, each server-side only so the key never reaches the
+browser:
+
+- **Prompting track** — grading and the coach panel hit the Gemini API
+  (`lib/anthropic.ts`, name kept for a small diff — it no longer touches
+  Anthropic), called exclusively from `app/api/{grade,coach}/route.ts`.
+  Needs `GEMINI_API_KEY`.
+- **Agentic track** — the coding agent and its judge (`lib/agent/*`) hit
+  Groq's OpenAI-compatible API (`lib/agent/groqClient.ts`), called from
+  `app/api/agent/*/route.ts`. Needs `GROQ_API_KEY`. The agent's `run_tests`
+  tool executes pytest inside a locked-down Docker container
+  (`docker/sandbox.Dockerfile`, built as `the-range-sandbox:latest`) — Docker
+  must be available wherever this runs.
 
 ## Local development
 
 ```bash
 npm install
-cp .env.example .env.local   # then fill in ANTHROPIC_API_KEY
+cp .env.example .env.local   # fill in GEMINI_API_KEY and GROQ_API_KEY
+docker build -t the-range-sandbox:latest docker/  # needed for the agentic track
 npm run dev
 ```
 
@@ -49,19 +56,23 @@ Open http://localhost:3000.
 
 ## Deploying
 
-This is a standard Next.js app (frontend + serverless API routes in one
-deploy), so the simplest path is:
+The prompting track is a standard Next.js app (frontend + serverless API
+routes), so a plain deploy works:
 
 1. **Vercel** — import this repo at https://vercel.com/new. Vercel detects
    Next.js automatically; no build config needed.
-2. Set the environment variable `ANTHROPIC_API_KEY` (and optionally
-   `ANTHROPIC_MODEL`) in the Vercel project's Settings → Environment
-   Variables. Get a key at https://console.anthropic.com/.
-3. Deploy. The API routes (`/api/grade`, `/api/coach`) run as serverless
-   functions automatically — nothing else to configure.
+2. Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) and `GROQ_API_KEY`
+   (and optionally `AGENT_GROQ_MODEL` / `GROQ_BASE_URL`) in the project's
+   Settings → Environment Variables.
+3. Deploy. `/api/grade` and `/api/coach` run as serverless functions
+   automatically.
 
-Netlify or Cloudflare Pages work the same way (both support Next.js API
-routes/functions natively) if you'd rather not use Vercel.
+Netlify or Cloudflare Pages work the same way for the prompting track. The
+**agentic track's `run_tests` tool won't work on a plain serverless
+deploy** — it shells out to `docker`, which serverless functions don't have.
+Running the agentic track anywhere but locally means self-hosting (a VPS,
+Docker Compose, etc.) on a machine that has Docker and can build/run the
+`the-range-sandbox` image.
 
 ## Not built yet (natural next steps)
 
@@ -92,7 +103,9 @@ lib/
   challenges.ts            challenge definitions incl. hidden tests — SERVER ONLY
   types.ts                 shared types, incl. the sanitized PublicChallenge shape
   grading.ts                deterministic + judge grading
-  anthropic.ts              thin Anthropic SDK wrapper
+  anthropic.ts              prompting track's LLM call (Gemini), see above
+  agent/                    agentic track: agent loop, Groq client, grading, judge
+  agent-challenges/         agentic track: challenge repos + manifests — SERVER ONLY
   progress.ts                localStorage progress helpers (client only)
 components/                 UI: prompt editor, score dial, results, coach panel, etc.
 ```
