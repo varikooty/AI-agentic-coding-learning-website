@@ -140,7 +140,7 @@ async function dispatchTool(
   }
 }
 
-// 4500 is intentionally above dockerSandbox's own ~4000-char output cap on
+// 4500 is intentionally above pytestRunner's own ~4000-char output cap on
 // run_tests results, so grading (which parses resultSummary as JSON to read
 // passed/exitCode) never sees a result truncated mid-JSON.
 function truncateForLog(text: string, max = 4500): string {

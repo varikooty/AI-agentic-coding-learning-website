@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { isOffLimits, resolveInSandbox } from "./pathGuard";
-import { runTestsInSandbox } from "./dockerSandbox";
+import { runTestsInSandbox } from "./pytestRunner";
 import type { RunTestsResult } from "./types";
 
 const SKIP_DIRS = new Set([".git", "__pycache__", ".pytest_cache", "node_modules"]);
